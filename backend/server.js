@@ -96,8 +96,4 @@ if (!process.env.VERCEL) {
   });
 }
 
-// Export both standard request handler and Express app instance for Vercel
-module.exports = (req, res) => {
-  return app(req, res);
-};
-module.exports.app = app;
+module.exports = app;
