@@ -1,14 +1,14 @@
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+try {
+  require('dotenv').config({ path: path.join(__dirname, '.env') });
+} catch (_) {}
 require('dotenv').config();
 
 if (!process.env.VERCEL) {
   try {
     const dns = require('dns');
     dns.setServers(['1.1.1.1', '8.8.8.8']);
-  } catch (e) {
-    // DNS override fallback
-  }
+  } catch (_) {}
 }
 
 const express = require('express');
@@ -21,6 +21,9 @@ const incomeRoutes = require('./routes/incomeRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const ocrRoutes = require('./routes/ocrRoutes');
 const insightRoutes = require('./routes/insightRoutes');
+
+// Safe initial connect
+connectDB().catch((err) => console.error('Initial DB connection error:', err.message));
 
 const app = express();
 
@@ -93,4 +96,8 @@ if (!process.env.VERCEL) {
   });
 }
 
-module.exports = app;
+// Export both standard request handler and Express app instance for Vercel
+module.exports = (req, res) => {
+  return app(req, res);
+};
+module.exports.app = app;
