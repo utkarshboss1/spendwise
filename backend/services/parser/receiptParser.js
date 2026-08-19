@@ -19,7 +19,7 @@ const cleanOCRText = (text) => {
   cleaned = cleaned.replace(/(\d)[lI](\d)/g, '$11$2');
   cleaned = cleaned.replace(/(\d)[lI]\b/g, '$11');
   cleaned = cleaned.replace(/\b[lI](\d)/g, '1$1');
-  cleaned = cleaned.replace(/(\d+)\s*[lI](\d{2})\b/g, '$1.12');
+  cleaned = cleaned.replace(/(\d+)\s*[lI](\d{2})\b/g, '$1.$2');
 
   // Fix common OCR errors: letter 'O' instead of '0' in numeric context
   cleaned = cleaned.replace(/(\d)O(\d)/g, '$10$2');
@@ -37,7 +37,7 @@ const detectMerchant = (lines, rawText) => {
     'invoice', 'receipt', 'order', 'bill', 'gst', 'gstin', 'date', 'time', 'cashier', 
     'pos', 'phone', 'tel', 'mobile', 'address', 'email', 'website', 'payment', 'upi', 
     'thank', 'customer', 'welcome', 'challan', 'store', 'terminal', 'merchant', 'cash', 
-    'card', 'rupay', 'visa', 'mastercard', 'slip', 'token', 'welcome', 'hsn', 'sac', 
+    'card', 'rupay', 'visa', 'mastercard', 'slip', 'token', 'hsn', 'sac', 
     'tax', 'cfee', 'sfee', 'table', 'pumps', 'station', 'retail', 'outlet', 'service', 
     'no.', 'no :', 'ph:', 'contact', 'www.', 'http', 'mode', 'authorized', 'copy'
   ];
@@ -51,7 +51,6 @@ const detectMerchant = (lines, rawText) => {
   for (let i = 0; i < scanLimit; i++) {
     const line = lines[i].trim();
     
-    // Skip if line is too short, starts with number, is a divider, or contains metadata
     if (
       line.length < 3 || 
       line.match(/^[=\-\*\._\s\/\\]+$/) || 
@@ -61,7 +60,6 @@ const detectMerchant = (lines, rawText) => {
       continue;
     }
 
-    // Clean up typical OCR artifacts
     let cleaned = line.replace(/[^a-zA-Z0-9\s&\-\'\.\+]/g, '').trim();
     cleaned = cleaned.replace(/\s+/g, ' ');
 
@@ -73,10 +71,9 @@ const detectMerchant = (lines, rawText) => {
   logParser('Merchant Candidates Identified', candidates);
 
   if (candidates.length > 0) {
-    return candidates[0]; // Choose the first valid line
+    return candidates[0];
   }
 
-  // Fallback: look for common Indian retail chains in the raw text
   const commonMerchants = [
     { name: 'DMart', pattern: /\bd\s*mart\b/i },
     { name: 'Reliance Smart', pattern: /\breliance\s*smart\b/i },
@@ -133,7 +130,6 @@ const extractAmount = (lines, rawText) => {
         
         const parsedNumbers = numbers.map(num => {
           let cleaned = num;
-          // Strip any trailing punctuation
           cleaned = cleaned.replace(/[\.,]$/, '');
           
           if (cleaned.includes(',') && cleaned.includes('.')) {
@@ -183,8 +179,7 @@ const extractAmount = (lines, rawText) => {
       }
       return parseFloat(cleaned);
     }).filter(val => {
-      // Exclude values that look like dates, HSNs, phone numbers, or quantities
-      return !isNaN(val) && val > 0 && val < 50000;
+      return !isNaN(val) && val > 0 && val < 500000;
     });
 
     logParser('Fallback Amount Candidates', parsedAmounts);
@@ -244,19 +239,6 @@ const extractDate = (rawText) => {
     };
   }
 
-  // Format 4: Month DD, YYYY (e.g., "Jul 17, 2026")
-  const textMonthRegex2 = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})\s*,?\s*(\d{4})\b/i;
-  const textMonthMatch2 = rawText.match(textMonthRegex2);
-  if (textMonthMatch2) {
-    const day = padZero(textMonthMatch2[2]);
-    const month = monthMap[textMonthMatch2[1].toLowerCase()];
-    const year = textMonthMatch2[3];
-    return {
-      date: `${year}-${month}-${day}`,
-      found: true
-    };
-  }
-
   return {
     date: new Date().toISOString().split('T')[0],
     found: false
@@ -303,8 +285,7 @@ const extractItems = (lines) => {
   const items = [];
   const metadataRegex = /(?:total|subtotal|tax|gst|vat|cgst|sgst|discount|savings|net|payable|paid|cash|card|upi|change|balance|hsn|invoice|customer|thank|round|items|mall|plot|gate|bengaluru|karnataka|india|road|street|floor|avenue|ltd|pvt|corp|store|cashier|pos|time|date|bill\s*no|tel|phone|mobile)/i;
 
-  // Skip the first 6 lines of store header metadata where items never start
-  const itemLines = lines.slice(6);
+  const itemLines = lines.slice(Math.min(lines.length, 5));
 
   for (let line of itemLines) {
     if (metadataRegex.test(line)) {
@@ -312,20 +293,10 @@ const extractItems = (lines) => {
     }
 
     let namePart = line;
-
-    // 1. Remove trailing price pairs: e.g. "Amul Milk 2 64.00 128.00" -> "Amul Milk 2"
     namePart = namePart.replace(/\s+\d+(?:[\.,]\d{2})?\s+\d+(?:[\.,]\d{2})?\s*$/, '');
-    
-    // 2. Remove trailing single price: e.g. "Surf Excel 215.00" -> "Surf Excel"
     namePart = namePart.replace(/\s+\d+(?:[\.,]\d{2})?\s*$/, '');
-
-    // 3. Remove trailing quantity: e.g. "Amul Milk 2" -> "Amul Milk"
     namePart = namePart.replace(/\s+\d+\s*$/, '');
-
-    // 4. Remove weight/quantity indicators: e.g. "Bananas 1.250kg" -> "Bananas"
     namePart = namePart.replace(/\s+\d+(?:\.\d+)?\s*(?:kg|g|ltr|ml|pcs|pc|qty)\b/i, '');
-
-    // 5. Remove HSN codes (typically 4-8 digit numbers)
     namePart = namePart.replace(/\b\d{4,8}\b/g, '');
 
     let cleanName = namePart.replace(/[^a-zA-Z0-9\s\-\'\+]/g, '').trim();
@@ -377,36 +348,28 @@ const parseReceiptText = (text) => {
 
   logParser('OCR Raw Text Received', text);
 
-  // 1. OCR Cleanup
   const cleanedText = cleanOCRText(text);
   logParser('Cleaned Text', cleanedText);
 
-  // Split cleaned text into non-empty lines
   const lines = cleanedText.split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  // 2. Merchant Detection
   const merchant = detectMerchant(lines, cleanedText);
   logParser('Selected Merchant', merchant);
 
-  // 3. Amount Extraction
   const amount = extractAmount(lines, cleanedText);
   logParser('Selected Amount', amount);
 
-  // 4. Date Extraction
   const dateObj = extractDate(cleanedText);
   logParser('Selected Date', dateObj.date);
 
-  // 5. Tax Extraction
   const tax = extractTax(lines);
   logParser('Selected Tax', tax);
 
-  // 6. Item Extraction
   const items = extractItems(lines);
   logParser('Extracted Items', items);
 
-  // 7. Confidence Score
   const confidence = calculateConfidence(merchant, amount, dateObj.found, items, cleanedText);
   logParser('Computed Confidence Score', confidence);
 
@@ -420,7 +383,6 @@ const parseReceiptText = (text) => {
   };
 
   logParser('Final Parsed Output Object', parsedOutput);
-
   return parsedOutput;
 };
 
