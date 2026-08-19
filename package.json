@@ -1,0 +1,20 @@
+{
+  "name": "spendwise",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SpendWise - AI-Powered Personal Finance & Expense Tracker",
+  "scripts": {
+    "build": "cd frontend && npm run build",
+    "vercel-build": "cd frontend && npm install && npm run build"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mindee": "^5.6.0",
+    "mongoose": "^8.4.1",
+    "multer": "^2.2.0"
+  }
+}
