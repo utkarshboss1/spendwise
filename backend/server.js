@@ -22,24 +22,55 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const ocrRoutes = require('./routes/ocrRoutes');
 const insightRoutes = require('./routes/insightRoutes');
 
-connectDB();
-
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-app.use('/api/auth', authRoutes);
-app.use('/api/expenses', expenseRoutes);
-app.use('/api/income', incomeRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/expenses', ocrRoutes);
-app.use('/api/dashboard', insightRoutes);
+// Database connection middleware for serverless invocations
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+  } catch (err) {
+    console.error('Database connection error in middleware:', err.message);
+  }
+  next();
+});
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', service: 'spendwise-api', time: new Date().toISOString() });
+const healthHandler = (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'spendwise-api',
+    dbConfigured: Boolean(process.env.MONGODB_URI),
+    time: new Date().toISOString(),
+  });
+};
+
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
+app.get('/', (req, res) => {
+  res.json({ message: 'SpendWise API is running' });
 });
+
+// Dual mounting: supports both standard and stripped /api/ prefixes
+app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
+
+app.use('/api/expenses', expenseRoutes);
+app.use('/expenses', expenseRoutes);
+
+app.use('/api/income', incomeRoutes);
+app.use('/income', incomeRoutes);
+
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/dashboard', dashboardRoutes);
+
+app.use('/api/expenses', ocrRoutes);
+app.use('/expenses', ocrRoutes);
+
+app.use('/api/dashboard', insightRoutes);
+app.use('/dashboard', insightRoutes);
 
 app.use((req, res, next) => {
   res.status(404).json({ message: `Endpoint ${req.originalUrl} not found` });
