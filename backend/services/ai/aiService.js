@@ -177,7 +177,7 @@ const handleAIError = (error, contextName) => {
 
 // Generic fetch function for Groq API
 const callGroqAPI = async (prompt, systemInstruction = '') => {
-  const modelName = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+  const modelName = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
   
   const messages = [];
   if (systemInstruction) {
