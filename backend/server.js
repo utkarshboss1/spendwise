@@ -22,12 +22,15 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const ocrRoutes = require('./routes/ocrRoutes');
 const insightRoutes = require('./routes/insightRoutes');
 
+// Initialize database connection
+connectDB().catch((err) => console.error('Initial DB connection error:', err.message));
+
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// Database connection middleware for serverless invocations
+// Database connection assurance middleware for serverless requests
 app.use(async (req, res, next) => {
   try {
     await connectDB();
@@ -87,10 +90,8 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-if (!process.env.VERCEL && require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-  });
-}
+app.listen(PORT, () => {
+  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+});
 
 module.exports = app;
