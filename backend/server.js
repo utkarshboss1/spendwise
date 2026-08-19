@@ -13,6 +13,7 @@ if (!process.env.VERCEL) {
 
 const express = require('express');
 const cors = require('cors');
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 
 const authRoutes = require('./routes/authRoutes');
@@ -22,30 +23,18 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const ocrRoutes = require('./routes/ocrRoutes');
 const insightRoutes = require('./routes/insightRoutes');
 
-// Safe initial connect
-connectDB().catch((err) => console.error('Initial DB connection error:', err.message));
-
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// Database connection assurance middleware for serverless requests
-app.use(async (req, res, next) => {
-  try {
-    await connectDB();
-  } catch (err) {
-    console.error('Database connection error in middleware:', err.message);
-  }
-  next();
-});
-
-// Health check endpoint
+// Immediate health check endpoint (does not wait for DB)
 const healthHandler = (req, res) => {
   res.json({
     status: 'ok',
     service: 'spendwise-api',
     dbConfigured: Boolean(process.env.MONGODB_URI),
+    dbConnected: mongoose.connection.readyState === 1,
     time: new Date().toISOString(),
   });
 };
@@ -53,7 +42,17 @@ const healthHandler = (req, res) => {
 app.get('/api/health', healthHandler);
 app.get('/health', healthHandler);
 app.get('/', (req, res) => {
-  res.json({ message: 'SpendWise API is running' });
+  res.json({ message: 'SpendWise API is running', status: 'ok' });
+});
+
+// Database connection assurance middleware for API endpoints
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+  } catch (err) {
+    console.error('Database connection error in middleware:', err.message);
+  }
+  next();
 });
 
 // Dual mounting: supports both standard and stripped /api/ prefixes
@@ -80,7 +79,7 @@ app.use((req, res, next) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('Server error handler:', err.stack || err.message);
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
   res.status(statusCode).json({
     message: err.message || 'Internal Server Error',
