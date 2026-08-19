@@ -6,10 +6,11 @@ import DashboardStats from '../components/Dashboard/DashboardStats';
 import CategoryPieChart from '../components/Dashboard/CategoryPieChart';
 import SpendingTrendChart from '../components/Dashboard/SpendingTrendChart';
 import ExpenseForm from '../components/Expense/ExpenseForm';
+import AddExpenseChoiceModal from '../components/Expense/AddExpenseChoiceModal';
 import AIInsightsCard from '../components/ai/AIInsightsCard';
 import Loader from '../components/Common/Loader';
 import { useToast } from '../context/ToastContext';
-import { Plus, ArrowRight, Receipt, AlertCircle, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Plus, ArrowRight, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 
 const Dashboard = () => {
@@ -19,7 +20,9 @@ const Dashboard = () => {
 
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isChoiceModalOpen, setIsChoiceModalOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [prefilledData, setPrefilledData] = useState(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
 
   const fetchDashboardData = async () => {
@@ -45,6 +48,7 @@ const Dashboard = () => {
       await expenseApi.createExpense(expenseData);
       showToast('Expense added successfully', 'success');
       setIsFormOpen(false);
+      setPrefilledData(null);
       
       // Refresh dashboard data
       const updated = await dashboardApi.getDashboardData();
@@ -52,6 +56,63 @@ const Dashboard = () => {
     } catch (error) {
       console.error(error);
       showToast(error.response?.data?.message || 'Failed to add expense', 'error');
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
+
+  // Receipt parsed callback from AddExpenseChoiceModal
+  const handleReceiptParsed = async (parsedData, classification) => {
+    try {
+      setFormSubmitting(true);
+      const expenseTitle = classification?.title || parsedData?.merchant || 'Receipt Purchase';
+      const expenseAmount = parsedData?.amount || 0;
+      const expenseCategory = classification?.category || 'Others';
+      const expenseDate = parsedData?.date || new Date().toISOString().split('T')[0];
+      const expenseDescription = classification?.description || (parsedData?.items && parsedData.items.length > 0 ? `Items: ${parsedData.items.join(', ')}` : 'Auto-extracted receipt details');
+
+      // Auto-log if confidence >= 0.85, valid merchant, and valid amount
+      if (
+        classification?.confidence >= 0.85 &&
+        expenseAmount > 0 &&
+        expenseTitle &&
+        expenseTitle.toLowerCase() !== 'unknown merchant'
+      ) {
+        await expenseApi.createExpense({
+          title: expenseTitle,
+          amount: expenseAmount,
+          category: expenseCategory,
+          date: expenseDate,
+          description: expenseDescription,
+        });
+        showToast(`Auto-logged: ₹${expenseAmount.toFixed(2)} at ${expenseTitle} (${expenseCategory})`, 'success');
+        const updated = await dashboardApi.getDashboardData();
+        setDashboardData(updated);
+      } else {
+        // Low confidence fallback: open verification form pre-filled
+        const prefill = {
+          title: expenseTitle === 'Unknown Merchant' ? '' : expenseTitle,
+          amount: expenseAmount > 0 ? expenseAmount.toString() : '',
+          category: expenseCategory,
+          description: expenseDescription,
+          date: expenseDate,
+        };
+        setPrefilledData(prefill);
+        setIsFormOpen(true);
+        showToast('Receipt scanned. Please verify details before saving.', 'info');
+      }
+    } catch (err) {
+      console.error('Error in handleReceiptParsed on Dashboard:', err);
+      showToast('Error parsing receipt details. Opening verification form.', 'warning');
+      const errPrefill = {
+        title: classification?.title || parsedData?.merchant || '',
+        amount: parsedData?.amount > 0 ? parsedData.amount.toString() : '',
+        category: classification?.category || 'Others',
+        description: `${classification?.description || ''}${parsedData?.items && parsedData.items.length > 0 ? ` (Items: ${parsedData.items.join(', ')})` : ''}`,
+        date: parsedData?.date || new Date().toISOString().split('T')[0],
+      };
+      setPrefilledData(errPrefill);
+      setIsFormOpen(true);
     } finally {
       setFormSubmitting(false);
     }
@@ -87,7 +148,7 @@ const Dashboard = () => {
         </div>
         
         <button
-          onClick={() => setIsFormOpen(true)}
+          onClick={() => setIsChoiceModalOpen(true)}
           className="flex items-center justify-center gap-2 px-5 py-3 bg-primary-505 hover:bg-primary-600 text-white text-sm font-extrabold rounded-2xl shadow-lg shadow-primary-505/20 hover:shadow-primary-600/30 transition-all hover:-translate-y-0.5 focus:outline-none"
         >
           <Plus className="w-5 h-5" />
@@ -216,9 +277,24 @@ const Dashboard = () => {
       {/* Floating Add Expense Modal */}
       <ExpenseForm
         isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
+        onClose={() => {
+          setIsFormOpen(false);
+          setPrefilledData(null);
+        }}
         onSubmit={handleAddExpense}
+        prefilledData={prefilledData}
         loading={formSubmitting}
+      />
+
+      {/* Add Expense Choice Modal (Manual vs Scan) */}
+      <AddExpenseChoiceModal
+        isOpen={isChoiceModalOpen}
+        onClose={() => setIsChoiceModalOpen(false)}
+        onManualClick={() => {
+          setPrefilledData(null);
+          setIsFormOpen(true);
+        }}
+        onReceiptParsed={handleReceiptParsed}
       />
 
     </div>

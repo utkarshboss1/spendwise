@@ -133,7 +133,7 @@ const ReceiptUpload = ({ onParsed, disabled, compact = false }) => {
               AI is reading your receipt...
             </div>
             <p className="text-xs text-gray-400 dark:text-gray-500 text-center">
-              Extracting text & running smart classification (Tesseract & Gemini)
+              Extracting receipt data & running smart classification (Mindee AI)
             </p>
           </div>
         ) : (
