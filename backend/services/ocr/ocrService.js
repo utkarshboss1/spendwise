@@ -1,5 +1,3 @@
-const mindee = require('mindee');
-
 const OCR_DEBUG = true;
 
 const logOCR = (title, data) => {
@@ -10,9 +8,18 @@ const logOCR = (title, data) => {
   }
 };
 
+let mindeeModule = null;
 let mindeeClient = null;
 
-const getMindeeClient = () => {
+const getMindee = async () => {
+  if (!mindeeModule) {
+    mindeeModule = await import('mindee');
+  }
+  return mindeeModule;
+};
+
+const getMindeeClient = async () => {
+  const mindee = await getMindee();
   if (!mindeeClient) {
     const apiKey = process.env.MINDEE_API_KEY;
     if (!apiKey) {
@@ -20,7 +27,7 @@ const getMindeeClient = () => {
     }
     mindeeClient = new mindee.Client({ apiKey });
   }
-  return mindeeClient;
+  return { client: mindeeClient, mindee };
 };
 
 /**
@@ -31,7 +38,7 @@ const getMindeeClient = () => {
  */
 const extractTextWithMindee = async (buffer, originalname = 'receipt.jpg') => {
   try {
-    const client = getMindeeClient();
+    const { client, mindee } = await getMindeeClient();
     logOCR('Starting Mindee v2 OCR Processing', {
       filename: originalname,
       bufferSize: `${(buffer.length / 1024).toFixed(2)} KB`,
